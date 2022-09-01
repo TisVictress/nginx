@@ -1,13 +1,22 @@
-name: 'Compile NGINX on Jammy'
+name: 'Compile NGINX on Target'
 description: |
-  Compile NGINX on Jammy
+  Compiles NGINX given a version, output directory, and a target image to compile on
+
+on:
+  push:
+    branches:
+      - 'dep-manage'
+      - '!main'
 
 inputs:
   version:
-    description: version of the dependency
+    description: 'dependency version'
     required: true
-  upstream-tarball:
-    description: URI of the upstream tarball
+  outputDir:
+    description: 'output directory'
+    required: true
+  target:
+    description: 'dependency OS target variant'
     required: true
 
 outputs:
@@ -27,11 +36,27 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - id: compile
-      shell: bash
-      working-directory: ${{ github.action_path }}
-      run: |
-        ./compile.sh
-      env:
-        VERSION: ${{ matrix.version }}
-        UPSTREAM_TARBALL: https://nginx.org/download/nginx-${{ matrix.version }}.tar.gz
+  
+  - name: docker build
+    id: docker-build
+    env:
+      SKIP_LOGIN: true
+    uses: actions-hub/docker/cli@master
+    with:
+      args: "build -t compilation -f dependency/actions/compile/${{ inputs.target }}.Dockerfile dependency/actions/compile"
+
+  - name: docker run
+    id: docker-run
+    uses: actions-hub/docker/cli@master
+    env:
+      SKIP_LOGIN: true
+    with:
+      args: "run -v /home/runner/work/nginx/nginx:/home compilation --version ${{ inputs.version }} --output-dir /home --target ${{ inputs.target }}"
+
+  - name: copy artifacts into output dir
+    shell: bash
+    run: cp -r $GITHUB_WORKSPACE/*.tgz* ${{ inputs.output-dir }}
+
+  - name: print contents of output dir
+    shell: bash
+    run: ls -al ${{ inputs.output-dir }}

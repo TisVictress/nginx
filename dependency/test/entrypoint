@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+parent_dir="$(cd "$(dirname "$0")" && pwd)"
+
+install_packages() {
+  apt-get -qqy update
+  # shellcheck disable=SC2086
+  apt-get -qqy install install build-essential curl zlib1g zlib1g-dev libssl-dev libpcre3 libpcre3-dev
+}
+
+extract_tarball() {
+  rm -rf nginx
+  tar -xf /tarball_path/*.tgz
+}
+
+check_version() {
+  expected_version=$1
+  actual_version="$(./nginx/sbin/nginx -v 2>&1 | cut -d'/' -f2)"
+  if [[ "${actual_version}" != "${expected_version}" ]]; then
+    echo "Version ${actual_version} does not match expected version ${expected_version}"
+    exit 1
+  fi
+}
+
+check_server() {
+  chmod 0755 nginx
+  mkdir -p nginx/html
+  mkdir -p nginx/conf
+  cp "${parent_dir}/fixtures/nginx.conf" nginx/conf
+  cp "${parent_dir}/fixtures/index.html" nginx/html
+
+  ./nginx/sbin/nginx -p nginx
+
+  set +e
+
+  succeeded=0
+  for _ in {1..5}; do
+    response="$(curl -s http://localhost:8080)"
+    if [[ $response == *"Sample nginx app"* ]]; then
+      succeeded=1
+      break
+    fi
+    sleep 1
+  done
+
+  kill "$(cat nginx/logs/nginx.pid)"
+
+  set -e
+
+  if [[ ${succeeded} -eq 0 ]]; then
+    echo "Failed to curl server"
+    exit 1
+  fi
+}
+
+main() {
+  # install_packages
+  extract_tarball
+  check_version "$1"
+  # check_server
+
+  echo "All tests passed!"
+}
+
+main "$@"
