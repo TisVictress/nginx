@@ -17,6 +17,14 @@ type GithubTagReponse struct {
 	Name string `json:"name"`
 }
 
+type NginxMetadata struct {
+	SemverVersion *semver.Version
+}
+
+func (nginxMetadata NginxMetadata) GetVersion() *semver.Version {
+	return nginxMetadata.SemverVersion
+}
+
 func main() {
 	if len(os.Args) != 3 {
 		fmt.Println("missing inputs")
@@ -46,7 +54,7 @@ func main() {
 	fmt.Printf("\tgenerateMetadata returned: %s\n", versionMetadata)
 }
 
-func getNginxVersions() ([]string, error) {
+func getNginxVersions() ([]versionology.HasVersions, error) {
 	// curl https://api.github.com/repos/nginx/nginx/tags
 	resp, err := http.Get("https://api.github.com/repos/nginx/nginx/tags")
 	if err != nil {
