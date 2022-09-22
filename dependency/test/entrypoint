@@ -4,23 +4,29 @@ set -euo pipefail
 parent_dir="$(cd "$(dirname "$0")" && pwd)"
 
 install_packages() {
+  echo "trying to install packages"
   apt-get -qqy update
   # shellcheck disable=SC2086
-  apt-get -qqy install install build-essential curl zlib1g zlib1g-dev libssl-dev libpcre3 libpcre3-dev
+  apt-get -qqy install build-essential curl zlib1g zlib1g-dev libssl-dev libpcre3 libpcre3-dev
 }
 
 extract_tarball() {
+  echo "Extracting test artifact"
   rm -rf nginx
-  tar -xf /tarball_path/*.tgz
+  tar -xf /tarball_path/nginx-1.22.0-bionic.tgz
 }
 
 check_version() {
+  echo "in check_version function"
   expected_version=$1
   actual_version="$(./nginx/sbin/nginx -v 2>&1 | cut -d'/' -f2)"
+  echo "${actual_version}"
+  echo "Checking if artifact version '${actual_version}' matches expected version '${expected_version}'"
   if [[ "${actual_version}" != "${expected_version}" ]]; then
     echo "Version ${actual_version} does not match expected version ${expected_version}"
     exit 1
   fi
+  echo "Version ${actual_version} matches with expected version ${expected_version}"
 }
 
 check_server() {
@@ -55,10 +61,15 @@ check_server() {
 }
 
 main() {
-  # install_packages
+  echo "*********************************"
+  echo "*********************************"
+  echo "********** Hello World **********"
+  echo "*********************************"
+  echo "*********************************"
+  install_packages
   extract_tarball
   check_version "$1"
-  # check_server
+  check_server
 
   echo "All tests passed!"
 }

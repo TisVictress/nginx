@@ -1,0 +1,143 @@
+name: Dependencies (Retrieve, Compile & Test, Create PR)
+
+on:
+  workflow_dispatch:
+  # https://crontab.guru/every-12-hours
+  schedule:
+    - cron: '0 */12 * * *'
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  select-go-version:
+    name: Select Go Version
+    runs-on: ubuntu-latest
+    outputs:
+      go-version: ${{ steps.select-go-version.outputs.go-version }}
+    steps:
+      - name: Select Go Version
+        id: select-go-version
+        run: echo "::set-output name=go-version::>=1.18.0"
+
+  # TODO: what happens when there are no new versions
+  retrieve:
+    name: Retrieve New Versions and Generate Metadata
+    needs:
+      - select-go-version
+    runs-on: ubuntu-latest
+    outputs:
+      metadata: ${{ steps.retrieve.outputs.metadata }}
+      new-versions: ${{ steps.retrieve.outputs.new-versions }}
+      targets: ${{ steps.retrieve.outputs.targets }}
+      len-new-versions: ${{ steps.len-new-versions.outputs.len-new-versions }}
+      id: ${{ steps.retrieve.outputs.id }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Setup Go '${{ needs.select-go-version.outputs.go-version }}'
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ needs.select-go-version.outputs.go-version }}
+      - name: Retrieve New Versions and Generate Metadata
+        id: retrieve
+        working-directory: dependency
+        run: |
+          METADATA_FILE="$(mktemp -d)/metadata.json"
+
+          make retrieve \
+            buildpackTomlPath="${{ github.workspace }}/buildpack.toml" \
+            output="${METADATA_FILE}"
+
+          echo "::set-output name=metadata-file::${METADATA_FILE}"
+
+          METADATA=$(cat "${METADATA_FILE}")
+          METADATA="${METADATA//'%'/'%25'}"
+          METADATA="${METADATA//$'\n'/'%0A'}"
+          METADATA="${METADATA//$'\r'/'%0D'}"
+          echo "::set-output name=metadata::${METADATA}"
+
+          NEW_VERSIONS=$(jq '[.[].version]' "${METADATA_FILE}")
+          NEW_VERSIONS="${NEW_VERSIONS//'%'/'%25'}"
+          NEW_VERSIONS="${NEW_VERSIONS//$'\n'/'%0A'}"
+          NEW_VERSIONS="${NEW_VERSIONS//$'\r'/'%0D'}"
+          echo "::set-output name=new-versions::${NEW_VERSIONS}"
+
+          echo "::set-output name=id::$(make id)"
+      - name: List new versions '${{ steps.retrieve.outputs.new-versions }}'
+        run: echo '${{ steps.retrieve.outputs.new-versions }}'
+      - name: Output metadata
+        run: jq '.' ${{ steps.retrieve.outputs.metadata-file }}
+      - name: Get count of new versions
+        id: len-new-versions
+        run: |
+          echo "::set-output name=len-new-versions::$(jq '. | length' ${{ steps.retrieve.outputs.metadata-file }})"
+
+  # Check if there is buildpack-provided compilation code and testing code
+  # Optional compilation code expected at: <buildpack>/dependency/actions/compile/
+  # Optional testing code expected at: <buildpack>/dependency/test/
+  get-compile-and-test:
+    name: Get Compilation and Testing Code
+    outputs:
+      should-compile: ${{ steps.compile-check.outputs.should-compile }}
+      should-test: ${{ steps.test-check.outputs.should-test }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Has Compilation Action?
+        id: compile-check
+        run: |
+          if test -d "dependency/actions/compile"; then
+            echo "Compilation action provided"
+            echo "::set-output name=should-compile::true"
+          fi
+
+      - name: Has Testing Action?
+        id: test-check
+        run: |
+          if test -d "dependency/test"; then
+            echo "Testing file provided"
+            echo "::set-output name=should-test::true"
+          fi
+
+  compile:
+    name: Compile and/or Test Dependency
+    needs:
+      - retrieve
+      - get-compile-and-test
+    if: needs.retrieve.outputs.len-new-versions > 0
+    strategy:
+      fail-fast: false
+      matrix:
+        metadata: ${{ fromJSON(needs.retrieve.outputs.metadata) }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Make Temporary Artifact Directory
+        id: make-output-dir
+        run: |
+          echo "::set-output name=output-dir::$(mktemp -d)"
+      - name: Output metadata
+        run: |
+          TEMP=$(mktemp)
+          echo '${{ toJSON(matrix.metadata) }}' > "${TEMP}"
+          jq '.' "${TEMP}"
+      # Compile if all the following conditions are met:
+      #   (1) compilation GitHub Action present in the buildpack directory
+      #   (2) SHA256 in metadata.json is empty
+      #   (3) URI in metadata.json is empty
+      - name: Compile version ${{ matrix.metadata.version }} on ${{ matrix.metadata.target }} Dockerfile
+        id: compile
+        if: ${{ needs.get-compile-and-test.outputs.should-compile && matrix.metadata.sha256 == '' && matrix.metadata.uri == '' }}
+        uses: ./dependency/actions/compile
+        with:
+          version: "${{ matrix.metadata.version }}"
+          outputDir: "${{ steps.make-output-dir.outputs.output-dir }}"
+          target: "${{ matrix.metadata.target }}"
