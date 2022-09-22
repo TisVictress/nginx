@@ -40,19 +40,6 @@ api = "0.8"
     uri = "https://deps.paketo.io/nginx/nginx_1.21.6_linux_x64_bionic_739ec0ac.tgz"
     version = "1.21.6"
 
-  [[metadata.dependencies]]
-    cpe = "cpe:2.3:a:nginx:nginx:1.22.0:*:*:*:*:*:*:*"
-    id = "nginx"
-    licenses = ["BSD-2-Clause"]
-    name = "Nginx Server"
-    purl = "pkg:generic/nginx@1.22.0?checksum=b33d569a6f11a01433a57ce17e83935e953ad4dc77cdd4d40f896c88ac26eb53&download_url=http://nginx.org/download/nginx-1.22.0.tar.gz"
-    sha256 = "fac163970d462767ad83f3d0289c5ae22c2eed1bfb17e59ff1843ff3a2757c1c"
-    source = "http://nginx.org/download/nginx-1.22.0.tar.gz"
-    source_sha256 = "b33d569a6f11a01433a57ce17e83935e953ad4dc77cdd4d40f896c88ac26eb53"
-    stacks = ["io.buildpacks.stacks.bionic"]
-    uri = "https://deps.paketo.io/nginx/nginx_1.22.0_linux_x64_bionic_fac16397.tgz"
-    version = "1.22.0"
-
   [[metadata.dependency-constraints]]
     constraint = "1.21.*"
     id = "nginx"

@@ -11,5 +11,5 @@ retrieve:
 	@cd retrieval; \
 	go build -o retrieve; \
 	./retrieve --buildpack_toml_path=$(buildpackTomlPath) \
-			--metadata_file=$(output) --targets_file=/tmp/targets.json; \
+			--output=$(output); \
 	rm retrieve

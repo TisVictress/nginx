@@ -28,15 +28,15 @@ type NginxMetadata struct {
 	SemverVersion *semver.Version
 }
 
-func (nginxMetadata NginxMetadata) GetVersion() *semver.Version {
+func (nginxMetadata NginxMetadata) Version() *semver.Version {
 	return nginxMetadata.SemverVersion
 }
 
 func main() {
-	retrieve.NewMetadata("nginx", getNginxVersions, generateMetadata, "bionic", "jammy")
+	retrieve.NewMetadata("nginx", getNginxVersions, generateMetadata)
 }
 
-func getNginxVersions() ([]versionology.HasVersion, error) {
+func getNginxVersions() (versionology.VersionFetcherArray, error) {
 	// curl https://api.github.com/repos/nginx/nginx/tags
 	resp, err := http.Get("https://api.github.com/repos/nginx/nginx/tags")
 	if err != nil {
@@ -52,7 +52,7 @@ func getNginxVersions() ([]versionology.HasVersion, error) {
 	}
 	// fmt.Printf("\ttags: %s\n", tags)
 
-	var versions []versionology.HasVersion
+	var versions []versionology.VersionFetcher
 	for _, tag := range tags {
 		versions = append(versions, NginxMetadata{
 			semver.MustParse(strings.TrimPrefix(tag.Name, "release-")),
@@ -62,13 +62,13 @@ func getNginxVersions() ([]versionology.HasVersion, error) {
 	return versions, nil
 }
 
-func generateMetadata(hasVersion versionology.HasVersion) (cargo.ConfigMetadataDependency, error) {
-	nginxVersion := hasVersion.GetVersion().String()
+func generateMetadata(hasVersion versionology.VersionFetcher) ([]versionology.Dependency, error) {
+	nginxVersion := hasVersion.Version().String()
 	nginxURL := fmt.Sprintf("https://nginx.org/download/nginx-%s.tar.gz", nginxVersion)
 
 	sourceSHA, err := getDependencySHA(nginxVersion)
 	if err != nil {
-		return cargo.ConfigMetadataDependency{}, fmt.Errorf("could get sha: %w", err)
+		return nil, fmt.Errorf("could get sha: %w", err)
 	}
 
 	// If the dependency is to be compiled, the SHA256 and URI field from the metadata should be omitted in this step.
@@ -77,14 +77,27 @@ func generateMetadata(hasVersion versionology.HasVersion) (cargo.ConfigMetadataD
 		ID:              "nginx",
 		Name:            "NGINX",
 		Source:          nginxURL,
-		SourceSHA256:    sourceSHA,
+		SourceChecksum:  sourceSHA,
 		DeprecationDate: nil,
 		Licenses:        retrieve.LookupLicenses(nginxURL, decompress),
 		PURL:            retrieve.GeneratePURL("nginx", nginxVersion, sourceSHA, nginxURL),
 		CPE:             fmt.Sprintf("cpe:2.3:a:nginx:nginx:%s:*:*:*:*:*:*:*", nginxVersion),
+		Stacks:          []string{"io.buildpacks.stacks.bionic"},
 	}
 
-	return dep, nil
+	bionicDependency, err := versionology.NewDependency(dep, "bionic")
+	if err != nil {
+		return nil, fmt.Errorf("could get sha: %w", err)
+	}
+
+	dep.Stacks = []string{"io.buildpacks.stacks.jammy"}
+
+	jammyDependency, err := versionology.NewDependency(dep, "jammy")
+	if err != nil {
+		return nil, fmt.Errorf("could get sha: %w", err)
+	}
+
+	return []versionology.Dependency{bionicDependency, jammyDependency}, nil
 
 }
 
