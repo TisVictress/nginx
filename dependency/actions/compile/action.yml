@@ -1,12 +1,10 @@
 name: 'Compile NGINX on Target'
 description: |
   Compiles NGINX given a version, output directory, and a target image to compile on
-
 on:
   push:
     branches:
-      - 'dep-manage'
-      - '!main'
+      - 'main'
 
 inputs:
   version:
@@ -19,24 +17,10 @@ inputs:
     description: 'dependency OS target variant'
     required: true
 
-outputs:
-  tarball-name:
-    description: name of the tarball
-    value: ${{ steps.compile.outputs.tarball-name }}
-  tarball-path:
-    description: full path of the tarball
-    value: ${{ steps.compile.outputs.tarball-path }}
-  sha256:
-    description: SHA256 of the dependency
-    value: ${{ steps.compile.outputs.sha256 }}
-  upstream-sha256:
-    description: SHA256 of the upstream dependency
-    value: ${{ steps.compile.outputs.upstream-sha256 }}
-
 runs:
   using: 'composite'
   steps:
-  
+
   - name: docker build
     id: docker-build
     env:
@@ -51,12 +35,24 @@ runs:
     env:
       SKIP_LOGIN: true
     with:
-      args: "run -v /home/runner/work/nginx/nginx:/home compilation --version ${{ inputs.version }} --output-dir /home --target ${{ inputs.target }}"
-
-  - name: copy artifacts into output dir
-    shell: bash
-    run: cp -r $GITHUB_WORKSPACE/*.tgz* ${{ inputs.output-dir }}
+      args: "run -v ${{ inputs.outputDir }}:/home compilation --version ${{ inputs.version }} --outputDir /home --target ${{ inputs.target }}"
 
   - name: print contents of output dir
     shell: bash
-    run: ls -al ${{ inputs.output-dir }}
+    run: ls -lah ${{ inputs.outputDir }}
+
+  - name: prepare test
+    id: prepare-test
+    uses: actions-hub/docker/cli@master
+    env:
+      SKIP_LOGIN: true
+    with:
+      args: "build -t test -f dependency/test/${{ inputs.target }}/Dockerfile dependency/test/${{ inputs.target }}"
+
+  - name: run test
+    id: run-test
+    uses: actions-hub/docker/cli@master
+    env:
+      SKIP_LOGIN: true
+    with:
+      args: "run -v ${{ inputs.outputDir }}:/tarball_path test --version ${{ inputs.version }}"
