@@ -98,13 +98,13 @@ function main() {
       echo "Running make and make install"
 
       make
-      DESTDIR="${dest_dir}/nginx" make install
+      DESTDIR="${dest_dir}" make install
     popd
   popd
 
   pushd "${dest_dir}"
-    rm -Rf ./nginx/html ./nginx/conf
-    mkdir nginx/conf
+    rm -Rf ./html ./conf
+    mkdir conf
     tar zcvf "${output_dir}/temp.tgz" .
   popd
 

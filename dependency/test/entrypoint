@@ -1,77 +1,80 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
+set -x
 
-parent_dir="$(cd "$(dirname "$0")" && pwd)"
+name=
+version=
+dependency_url=
+mixins=
+required_dependency=
 
-install_packages() {
-  echo "trying to install packages"
+while test $# -gt 0; do
+  case $1 in
+    --name)
+      name=$2
+      shift
+      ;;
+    --version)
+      version=$2
+      shift
+      ;;
+    --dependency-url)
+      dependency_url=$2
+      shift
+      ;;
+    --mixins)
+      mixins=$2
+      shift
+      ;;
+    --required-dependency)
+      required_dependency=$2
+      shift
+      ;;
+    *)
+      echo >&2 "Invalid argument: $1"
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+if [[ "${name}" == "" || "${version}" == "" || "${dependency_url}" == "" ]]; then
+  echo "Name, version, and dependency-url must be set"
+  exit 1
+fi
+
+package_names=""
+
+for mixin in $(echo ${mixins} | jq -r .[]); do
+  if [[ $mixin = set:* ]]; then
+    echo "This action does not support 'set:' mixins"
+    exit 1
+  elif [[ $mixin = run:* ]]; then
+    continue
+  elif [[ $mixin = build:* ]]; then
+    package_names="${package_names} ${mixin#"build:"}"
+  else
+    package_names="${package_names} ${mixin}"
+  fi
+done
+
+if [[ "${package_names}" != "" ]]; then
   apt-get -qqy update
   # shellcheck disable=SC2086
-  apt-get -qqy install build-essential curl zlib1g zlib1g-dev libssl-dev libpcre3 libpcre3-dev
-}
+  apt-get -qqy install ${package_names}
+fi
 
-extract_tarball() {
-  echo "Extracting test artifact"
-  rm -rf nginx
-  tar -xf /tarball_path/nginx-1.22.0-bionic.tgz
-}
+# mkdir -p dependency
+# pushd dependency > /dev/null
+#   curl -O "${dependency_url}"
+# popd > /dev/null
 
-check_version() {
-  echo "in check_version function"
-  expected_version=$1
-  actual_version="$(./nginx/sbin/nginx -v 2>&1 | cut -d'/' -f2)"
-  echo "${actual_version}"
-  echo "Checking if artifact version '${actual_version}' matches expected version '${expected_version}'"
-  if [[ "${actual_version}" != "${expected_version}" ]]; then
-    echo "Version ${actual_version} does not match expected version ${expected_version}"
-    exit 1
-  fi
-  echo "Version ${actual_version} matches with expected version ${expected_version}"
-}
+# if [[ "${required_dependency}" != "" ]]; then
+#   mkdir -p required_dependency
+#   pushd required_dependency > /dev/null
+#     curl -O "${required_dependency}"
+#   popd > /dev/null
+# fi
 
-check_server() {
-  chmod 0755 nginx
-  mkdir -p nginx/html
-  mkdir -p nginx/conf
-  cp "${parent_dir}/fixtures/nginx.conf" nginx/conf
-  cp "${parent_dir}/fixtures/index.html" nginx/html
-
-  ./nginx/sbin/nginx -p nginx
-
-  set +e
-
-  succeeded=0
-  for _ in {1..5}; do
-    response="$(curl -s http://localhost:8080)"
-    if [[ $response == *"Sample nginx app"* ]]; then
-      succeeded=1
-      break
-    fi
-    sleep 1
-  done
-
-  kill "$(cat nginx/logs/nginx.pid)"
-
-  set -e
-
-  if [[ ${succeeded} -eq 0 ]]; then
-    echo "Failed to curl server"
-    exit 1
-  fi
-}
-
-main() {
-  echo "*********************************"
-  echo "*********************************"
-  echo "********** Hello World **********"
-  echo "*********************************"
-  echo "*********************************"
-  install_packages
-  extract_tarball
-  check_version "$1"
-  check_server
-
-  echo "All tests passed!"
-}
-
-main "$@"
+"/run-test" "${version}"
