@@ -5,7 +5,7 @@ id:
 
 test:
 	@cd test; \
-	TARBALL_PATH=$(tarballPath) VERSION=$(version) go test
+	./run-test --version $(version) --tarballPath $(tarballPath)
 
 retrieve:
 	@cd retrieval; \
